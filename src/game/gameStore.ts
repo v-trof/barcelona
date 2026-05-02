@@ -1,431 +1,103 @@
-import { observable, computed, action, makeObservable } from 'mobx';
-import type { Position, TileType, BaseCategory, Cell, UpgradeResult } from './types';
-import { categoryToDefaultTile, tileToCategory, upgradeScores } from './types';
-import { getUpgradesForTile, upgradePriority, type GameStateAccessor } from './tiles';
+import { makeAutoObservable } from 'mobx';
+import { BattleMap, TileType } from './types';
 
-const SUPERBLOCK_SIZE = 3;
-const GRID_SIZE = 3;
-const TOTAL_CELLS = SUPERBLOCK_SIZE * SUPERBLOCK_SIZE * GRID_SIZE * GRID_SIZE; // 81
-const DECK_SIZE = 5;
-const MAX_UPGRADES = 10000;
+export class GameStore {
+  map: BattleMap | null = null;
+  selectedTile: TileType = 'GROUND';
+  selectedCol: number = -1;
+  selectedRow: number = -1;
+  rotation: number = 0;
+  history: (BattleMap | null)[] = [];
+  historyIndex: number = -1;
 
-// Create the game state accessor for upgrade checks
-function createGameAccessor(store: GameStore): GameStateAccessor {
-  return {
-    getCell: (pos: Position) => store.getCell(pos),
+  constructor() {
+    makeAutoObservable(this);
+  }
 
-    getAdjacentCells: (pos: Position) => {
-      const adjacent: { pos: Position; tile: TileType | null }[] = [];
-      const directions = [
-        [-1, 0], [1, 0], [0, -1], [0, 1], // N, S, W, E
-      ];
+  loadMap(map: BattleMap): void {
+    const mapCopy = JSON.parse(JSON.stringify(map)) as BattleMap;
+    this.map = mapCopy;
+    this.history = [mapCopy];
+    this.historyIndex = 0;
+    this.rotation = map.meta.rotation || 0;
+  }
 
-      for (const [dr, dc] of directions) {
-        const newRow = pos.cellRow + dr;
-        const newCol = pos.cellCol + dc;
+  selectTile(tileType: TileType): void {
+    this.selectedTile = tileType;
+  }
 
-        // Stay within same superblock
-        if (newRow >= 0 && newRow < 3 && newCol >= 0 && newCol < 3) {
-          const newPos: Position = {
-            ...pos,
-            cellRow: newRow,
-            cellCol: newCol,
-          };
-          adjacent.push({ pos: newPos, tile: store.getCell(newPos) });
-        }
-      }
+  paintTile(col: number, row: number): void {
+    if (!this.map || row >= this.map.tiles.length || col >= this.map.tiles[0].length) return;
 
-      return adjacent;
-    },
+    const originalTile = { ...this.map.tiles[row][col] };
+    this.map.tiles[row][col] = {
+      type: this.selectedTile,
+      meta: originalTile.meta,
+    };
 
-    getSuperblockCells: (sbRow: number, sbCol: number) => {
-      const cells: { pos: Position; tile: TileType | null }[] = [];
-      for (let r = 0; r < 3; r++) {
-        for (let c = 0; c < 3; c++) {
-          const pos: Position = {
-            superblockRow: sbRow,
-            superblockCol: sbCol,
-            cellRow: r,
-            cellCol: c,
-          };
-          cells.push({ pos, tile: store.getCell(pos) });
-        }
-      }
-      return cells;
-    },
+    this.addToHistory();
+  }
 
-    getAdjacentSuperblocks: (sbRow: number, sbCol: number) => {
-      const adjacent: { sbRow: number; sbCol: number }[] = [];
-      const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  selectCell(col: number, row: number): void {
+    this.selectedCol = col;
+    this.selectedRow = row;
+  }
 
-      for (const [dr, dc] of directions) {
-        const newRow = sbRow + dr;
-        const newCol = sbCol + dc;
-        if (newRow >= 0 && newRow < 3 && newCol >= 0 && newCol < 3) {
-          adjacent.push({ sbRow: newRow, sbCol: newCol });
-        }
-      }
+  setRotation(angle: number): void {
+    this.rotation = angle % 360;
+    if (this.map) {
+      this.map.meta.rotation = this.rotation;
+    }
+  }
 
-      return adjacent;
-    },
+  private addToHistory(): void {
+    if (!this.map) return;
 
-    isNearRoad: (pos: Position) => {
-      // Near road = at edge of superblock
-      return pos.cellRow === 0 || pos.cellRow === 2 || pos.cellCol === 0 || pos.cellCol === 2;
-    },
+    this.history = this.history.slice(0, this.historyIndex + 1);
+    this.history.push(JSON.parse(JSON.stringify(this.map)));
 
-    countInSuperblock: (sbRow: number, sbCol: number, category: BaseCategory) => {
-      let count = 0;
-      for (let r = 0; r < 3; r++) {
-        for (let c = 0; c < 3; c++) {
-          const tile = store.getCell({
-            superblockRow: sbRow,
-            superblockCol: sbCol,
-            cellRow: r,
-            cellCol: c,
-          });
-          if (tile && tileToCategory[tile] === category) {
-            count++;
-          }
-        }
-      }
-      return count;
-    },
+    if (this.history.length > 50) {
+      this.history.shift();
+    } else {
+      this.historyIndex++;
+    }
+  }
 
-    countTileTypeInSuperblock: (sbRow: number, sbCol: number, tileType: TileType) => {
-      let count = 0;
-      for (let r = 0; r < 3; r++) {
-        for (let c = 0; c < 3; c++) {
-          const tile = store.getCell({
-            superblockRow: sbRow,
-            superblockCol: sbCol,
-            cellRow: r,
-            cellCol: c,
-          });
-          if (tile === tileType) {
-            count++;
-          }
-        }
-      }
-      return count;
-    },
+  undo(): void {
+    if (this.historyIndex > 0) {
+      this.historyIndex--;
+      this.map = JSON.parse(JSON.stringify(this.history[this.historyIndex]));
+    }
+  }
 
-    countInAdjacentSuperblocks: (sbRow: number, sbCol: number, category: BaseCategory) => {
-      const adjacent = createGameAccessor(store).getAdjacentSuperblocks(sbRow, sbCol);
-      let count = 0;
-      for (const { sbRow: r, sbCol: c } of adjacent) {
-        count += createGameAccessor(store).countInSuperblock(r, c, category);
-      }
-      return count;
-    },
+  redo(): void {
+    if (this.historyIndex < this.history.length - 1) {
+      this.historyIndex++;
+      this.map = JSON.parse(JSON.stringify(this.history[this.historyIndex]));
+    }
+  }
 
-    countTileTypeInAdjacentSuperblocks: (sbRow: number, sbCol: number, tileType: TileType) => {
-      const adjacent = createGameAccessor(store).getAdjacentSuperblocks(sbRow, sbCol);
-      let count = 0;
-      for (const { sbRow: r, sbCol: c } of adjacent) {
-        count += createGameAccessor(store).countTileTypeInSuperblock(r, c, tileType);
-      }
-      return count;
-    },
+  canUndo(): boolean {
+    return this.historyIndex > 0;
+  }
 
-    countResidentialValueInAdjacentSuperblocks: (sbRow: number, sbCol: number) => {
-      const accessor = createGameAccessor(store);
-      const adjacent = accessor.getAdjacentSuperblocks(sbRow, sbCol);
-      let value = 0;
+  canRedo(): boolean {
+    return this.historyIndex < this.history.length - 1;
+  }
 
-      for (const { sbRow: r, sbCol: c } of adjacent) {
-        for (let cr = 0; cr < 3; cr++) {
-          for (let cc = 0; cc < 3; cc++) {
-            const tile = store.getCell({
-              superblockRow: r,
-              superblockCol: c,
-              cellRow: cr,
-              cellCol: cc,
-            });
-            if (tile && tileToCategory[tile] === 'R') {
-              // tier2_residential and highrise count as 4
-              if (tile === 'tier2_residential' || tile === 'highrise') {
-                value += 4;
-              } else {
-                value += 1;
-              }
-            }
-          }
-        }
-      }
+  exportJSON(): string {
+    if (!this.map) return '';
+    return JSON.stringify(this.map, null, 2);
+  }
 
-      return value;
-    },
-  };
+  importJSON(jsonStr: string): void {
+    try {
+      const map = JSON.parse(jsonStr) as BattleMap;
+      this.loadMap(map);
+    } catch (e) {
+      console.error('Failed to parse JSON:', e);
+    }
+  }
 }
 
-// Game store using MobX observable objects
-export function createGameStore() {
-  const store = observable({
-    // Grid state: 3D array [superblockRow][superblockCol][cellIndex]
-    grid: Array.from({ length: 3 }, () =>
-      Array.from({ length: 3 }, () =>
-        Array.from({ length: 9 }, () => null as TileType | null)
-      )
-    ),
-
-    // Deck of upcoming tiles
-    deck: [] as BaseCategory[],
-
-    // Current score
-    score: 0,
-
-    // Turn number
-    turn: 0,
-
-    // Hovered cell for showing upgrade info
-    hoveredCell: null as Position | null,
-
-    // Get cell at position
-    getCell(pos: Position): TileType | null {
-      const cellIndex = pos.cellRow * 3 + pos.cellCol;
-      return this.grid[pos.superblockRow][pos.superblockCol][cellIndex];
-    },
-
-    // Set cell at position
-    setCell(pos: Position, tile: TileType | null) {
-      const cellIndex = pos.cellRow * 3 + pos.cellCol;
-      this.grid[pos.superblockRow][pos.superblockCol][cellIndex] = tile;
-    },
-
-    // Generate a random tile category
-    generateRandomCategory(): BaseCategory {
-      const categories: BaseCategory[] = ['R', 'L', 'C', 'E'];
-      // Weighted distribution: R:1, L:1, C:0.4, E:0.2 (normalized)
-      // Total: 2.6, so R:38.5%, L:38.5%, C:15.4%, E:7.7%
-      const weights = [1, 1, 0.4, 0.2];
-      const totalWeight = weights.reduce((a, b) => a + b, 0);
-      let random = Math.random() * totalWeight;
-
-      for (let i = 0; i < categories.length; i++) {
-        random -= weights[i];
-        if (random <= 0) {
-          return categories[i];
-        }
-      }
-      return 'R';
-    },
-
-    // Fill deck to DECK_SIZE
-    fillDeck() {
-      while (this.deck.length < DECK_SIZE) {
-        this.deck.push(this.generateRandomCategory());
-      }
-    },
-
-    // Initialize the game
-    init() {
-      // Reset grid
-      for (let sbr = 0; sbr < 3; sbr++) {
-        for (let sbc = 0; sbc < 3; sbc++) {
-          for (let i = 0; i < 9; i++) {
-            this.grid[sbr][sbc][i] = null;
-          }
-        }
-      }
-      this.score = 0;
-      this.turn = 0;
-      this.deck = [];
-      this.fillDeck();
-    },
-
-    // Place a tile at position
-    placeTile(pos: Position) {
-      if (this.getCell(pos) !== null) {
-        return false; // Cell already occupied
-      }
-
-      if (this.deck.length === 0) {
-        return false; // No tiles to place
-      }
-
-      const category = this.deck.shift()!;
-      const tile = categoryToDefaultTile[category];
-
-      this.setCell(pos, tile);
-      this.turn++;
-
-      // Run rebuild phase (cascade upgrades)
-      this.runRebuildPhase(pos);
-
-      // Refill deck
-      this.fillDeck();
-
-      return true;
-    },
-
-    // Run the rebuild phase starting from placed position
-    runRebuildPhase(startPos: Position) {
-      const accessor = createGameAccessor(this);
-      let upgradeCount = 0;
-
-      // BFS queue of positions to check
-      // Start with all cells in the superblock (placement can affect block-level conditions)
-      const queue: Position[] = [];
-      
-      // Add all cells in the starting superblock
-      for (let r = 0; r < 3; r++) {
-        for (let c = 0; c < 3; c++) {
-          queue.push({
-            superblockRow: startPos.superblockRow,
-            superblockCol: startPos.superblockCol,
-            cellRow: r,
-            cellCol: c,
-          });
-        }
-      }
-
-      const visited = new Set<string>();
-
-      const posKey = (p: Position) =>
-        `${p.superblockRow},${p.superblockCol},${p.cellRow},${p.cellCol}`;
-
-      while (queue.length > 0) {
-        if (upgradeCount >= MAX_UPGRADES) {
-          throw new Error(`Maximum upgrade limit (${MAX_UPGRADES}) reached!`);
-        }
-
-        const pos = queue.shift()!;
-        const key = posKey(pos);
-
-        // Skip if already visited in this wave
-        if (visited.has(key)) {
-          continue;
-        }
-
-        const currentTile = this.getCell(pos);
-        if (!currentTile) {
-          visited.add(key);
-          continue;
-        }
-
-        // Get all possible upgrades for this tile
-        const upgrades = getUpgradesForTile(currentTile, pos, accessor);
-
-        // Find the best upgrade that can be applied (by priority)
-        let appliedUpgrade: TileType | null = null;
-
-        for (const upgradeTile of upgradePriority) {
-          // Skip if trying to "upgrade" to the same tile type
-          if (upgradeTile === currentTile) {
-            continue;
-          }
-          
-          const result = upgrades[upgradeTile];
-          if (result && result.verdict === 'can_upgrade') {
-            const allMet = result.conditions.every((c) => c.met);
-            if (allMet) {
-              appliedUpgrade = upgradeTile;
-              break;
-            }
-          }
-        }
-
-        if (appliedUpgrade) {
-          // Apply the upgrade
-          this.setCell(pos, appliedUpgrade);
-          upgradeCount++;
-
-          // Add score
-          const points = upgradeScores[appliedUpgrade] || 0;
-          this.score += points;
-
-          // Clear visited so cells can be re-checked after this change
-          visited.clear();
-
-          // Add neighbors to queue for cascade
-          const neighbors = accessor.getAdjacentCells(pos);
-          for (const { pos: nPos } of neighbors) {
-            queue.push(nPos);
-          }
-
-          // Also add all cells in the superblock (for block-level conditions)
-          for (let r = 0; r < 3; r++) {
-            for (let c = 0; c < 3; c++) {
-              queue.push({
-                superblockRow: pos.superblockRow,
-                superblockCol: pos.superblockCol,
-                cellRow: r,
-                cellCol: c,
-              });
-            }
-          }
-
-          // Also check adjacent superblocks for macro-level conditions
-          const adjSuperblocks = accessor.getAdjacentSuperblocks(
-            pos.superblockRow,
-            pos.superblockCol
-          );
-          for (const { sbRow, sbCol } of adjSuperblocks) {
-            for (let r = 0; r < 3; r++) {
-              for (let c = 0; c < 3; c++) {
-                queue.push({
-                  superblockRow: sbRow,
-                  superblockCol: sbCol,
-                  cellRow: r,
-                  cellCol: c,
-                });
-              }
-            }
-          }
-
-          // Re-add current position to check for further upgrades
-          queue.push(pos);
-        } else {
-          visited.add(key);
-        }
-      }
-    },
-
-    // Get upgrade info for hovered cell
-    getUpgradeInfo(pos: Position): Record<string, UpgradeResult> | null {
-      const tile = this.getCell(pos);
-      if (!tile) {
-        return null;
-      }
-
-      const accessor = createGameAccessor(this);
-      return getUpgradesForTile(tile, pos, accessor);
-    },
-
-    // Set hovered cell
-    setHoveredCell(pos: Position | null) {
-      this.hoveredCell = pos;
-    },
-
-    // Computed: total cells filled
-    get cellsFilled(): number {
-      let count = 0;
-      for (let sbr = 0; sbr < 3; sbr++) {
-        for (let sbc = 0; sbc < 3; sbc++) {
-          for (let i = 0; i < 9; i++) {
-            if (this.grid[sbr][sbc][i] !== null) {
-              count++;
-            }
-          }
-        }
-      }
-      return count;
-    },
-
-    // Computed: game over (all cells filled)
-    get isGameOver(): boolean {
-      return this.cellsFilled >= TOTAL_CELLS;
-    },
-  });
-
-  // Initialize the game
-  store.init();
-
-  return store;
-}
-
-export type GameStore = ReturnType<typeof createGameStore>;
-
-// Singleton game store
-export const gameStore = createGameStore();
+export const gameStore = new GameStore();

@@ -1,0 +1,92 @@
+{
+  "meta": {
+    "cols": 8,
+    "rows": 8,
+    "cellSizeMeters": 5,
+    "center": { "lat": 35.1815, "lng": 136.8863 },
+    "zoom": 15,
+    "rotation": 0
+  },
+  "tiles": [
+    [
+      { "type": "WATER", "meta": {} },
+      { "type": "WATER", "meta": {} },
+      { "type": "WATER", "meta": {} },
+      { "type": "WATER", "meta": {} },
+      { "type": "GROUND", "meta": {} },
+      { "type": "GROUND", "meta": {} },
+      { "type": "GROUND", "meta": {} },
+      { "type": "GROUND", "meta": {} }
+    ],
+    [
+      { "type": "WATER", "meta": {} },
+      { "type": "BUILDING_HIGH", "meta": { "levels": 8 } },
+      { "type": "BUILDING_MID", "meta": { "levels": 4 } },
+      { "type": "WATER", "meta": {} },
+      { "type": "PARK", "meta": {} },
+      { "type": "PARK", "meta": {} },
+      { "type": "FOREST", "meta": {} },
+      { "type": "FOREST", "meta": {} }
+    ],
+    [
+      { "type": "WATER", "meta": {} },
+      { "type": "BUILDING_MID", "meta": { "levels": 3 } },
+      { "type": "ROAD_MAJOR", "meta": { "highway": "primary" } },
+      { "type": "WATER", "meta": {} },
+      { "type": "PARK", "meta": {} },
+      { "type": "PARK", "meta": {} },
+      { "type": "FOREST", "meta": {} },
+      { "type": "FOREST", "meta": {} }
+    ],
+    [
+      { "type": "WATER", "meta": {} },
+      { "type": "BUILDING_LOW", "meta": { "levels": 1 } },
+      { "type": "ROAD_MINOR", "meta": { "highway": "secondary" } },
+      { "type": "WATER", "meta": {} },
+      { "type": "FARMLAND", "meta": {} },
+      { "type": "FARMLAND", "meta": {} },
+      { "type": "FARMLAND", "meta": {} },
+      { "type": "ROUGH", "meta": {} }
+    ],
+    [
+      { "type": "GROUND", "meta": {} },
+      { "type": "ROAD_MINOR", "meta": { "highway": "residential" } },
+      { "type": "PAVED_LOT", "meta": {} },
+      { "type": "GROUND", "meta": {} },
+      { "type": "FARMLAND", "meta": {} },
+      { "type": "FARMLAND", "meta": {} },
+      { "type": "PATH", "meta": {} },
+      { "type": "ROUGH", "meta": {} }
+    ],
+    [
+      { "type": "GROUND", "meta": {} },
+      { "type": "BUILDING_LOW", "meta": { "levels": 2 } },
+      { "type": "BUILDING_LOW", "meta": { "levels": 1 } },
+      { "type": "ROAD_MINOR", "meta": { "highway": "tertiary" } },
+      { "type": "GROUND", "meta": {} },
+      { "type": "PATH", "meta": {} },
+      { "type": "PATH", "meta": {} },
+      { "type": "GROUND", "meta": {} }
+    ],
+    [
+      { "type": "BRIDGE", "meta": {} },
+      { "type": "BUILDING_LOW", "meta": { "levels": 2 } },
+      { "type": "ROAD_MAJOR", "meta": { "highway": "primary" } },
+      { "type": "ROAD_MAJOR", "meta": { "highway": "primary" } },
+      { "type": "WALL", "meta": {} },
+      { "type": "WALL", "meta": {} },
+      { "type": "WALL", "meta": {} },
+      { "type": "WALL", "meta": {} }
+    ],
+    [
+      { "type": "WATER", "meta": {} },
+      { "type": "WATER", "meta": {} },
+      { "type": "WATER", "meta": {} },
+      { "type": "ROAD_MINOR", "meta": { "highway": "residential" } },
+      { "type": "WALL", "meta": {} },
+      { "type": "WALL", "meta": {} },
+      { "type": "WALL", "meta": {} },
+      { "type": "PAVED_LOT", "meta": {} }
+    ]
+  ]
+}
