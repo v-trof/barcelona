@@ -1,0 +1,21 @@
+---
+alwaysApply: true
+---
+
+Use React, Mobx, Vitest, Tailwind, react-popper
+Prefer tailwind for styles
+Prefer mobx over react state
+
+Use this pattern for stores
+```
+export function createGameStore() {
+  const store = observable({
+    // state and methods
+  });
+
+  return store;
+}
+```
+
+Test stores over testing components
+Don't write tests, comments and docs unless instructed 
